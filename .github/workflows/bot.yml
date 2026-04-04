@@ -1,0 +1,38 @@
+name: VScan Admin Bot
+
+on:
+  # Запускать вручную из вкладки Actions
+  workflow_dispatch:
+
+  # Автоперезапуск каждые 5 часов 50 минут
+  # (GitHub Actions завершает job через 6 часов)
+  schedule:
+    - cron: "0 */6 * * *"
+
+jobs:
+  run-bot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 350   # ~5 ч 50 мин — чуть меньше лимита GitHub
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run bot
+        run: python bot.py
+        env:
+          BOT_TOKEN:        ${{ secrets.BOT_TOKEN }}
+          GIST_TOKEN:       ${{ secrets.GIST_TOKEN }}
+          GIST_ID:          ${{ secrets.GIST_ID }}
+          VSCAN_SECRET_KEY: ${{ secrets.VSCAN_SECRET_KEY }}
+          ADMIN_IDS:        ${{ secrets.ADMIN_IDS }}
+          # Опционально: USE_FAKE_SNI=true  FAKE_SNI=google.com
