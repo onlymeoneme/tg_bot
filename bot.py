@@ -298,6 +298,48 @@ async def cmd_delete(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     )
 
 
+# ── /checkkey ─────────────────────────────────────────────────
+
+@admin_only
+async def cmd_checkkey(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """
+    Отладка: /checkkey <device_id> <expires_at>
+    Показывает какой ключ сгенерирует бот — сравните с настольным приложением.
+    Пример: /checkkey abc123 2026-12-31
+    """
+    if len(ctx.args) < 2:
+        await update.message.reply_text(
+            "Использование:\n"
+            "/checkkey <code>&lt;device_id&gt; &lt;expires_at&gt;</code>\n\n"
+            "Пример:\n"
+            "<code>/checkkey abc123 2026-12-31</code>\n\n"
+            "Введите те же данные что и в настольной программе — ключи должны совпасть.",
+            parse_mode="HTML",
+        )
+        return
+
+    import hashlib
+    from config import SECRET_KEY
+
+    dev_id     = ctx.args[0]
+    expires_at = ctx.args[1]
+    key        = create_key(dev_id, expires_at)
+
+    # Показываем fingerprint ключа чтобы убедиться что SECRET_KEY совпадает
+    key_fingerprint = hashlib.sha256(SECRET_KEY).hexdigest()[:16]
+
+    await update.message.reply_text(
+        f"🔑 <b>Результат генерации ключа:</b>\n\n"
+        f"Device ID:   <code>{dev_id}</code>\n"
+        f"Expires at:  <code>{expires_at}</code>\n"
+        f"Ключ:        <code>{key}</code>\n\n"
+        f"🔐 SECRET_KEY fingerprint: <code>{key_fingerprint}</code>\n\n"
+        f"<i>Сгенерируйте ключ для тех же данных в настольной программе "
+        f"и сравните. Если ключи разные — SECRET_KEY не совпадает.</i>",
+        parse_mode="HTML",
+    )
+
+
 # ── /export ───────────────────────────────────────────────────
 
 @admin_only
@@ -640,6 +682,12 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
 
 async def post_init(app: Application) -> None:
     """Устанавливает меню команд и загружает данные при старте."""
+    import hashlib
+    from config import SECRET_KEY
+    key_hash = hashlib.sha256(SECRET_KEY).hexdigest()[:12]
+    source = "env VSCAN_SECRET_KEY" if os.environ.get("VSCAN_SECRET_KEY") else "ВСТРОЕННЫЙ (из оригинального config.py)"
+    log.info("SECRET_KEY источник: %s | sha256[:12]=%s", source, key_hash)
+
     await app.bot.set_my_commands([
         BotCommand("list",    "Список лицензий"),
         BotCommand("issue",   "Выдать лицензию"),
@@ -649,9 +697,10 @@ async def post_init(app: Application) -> None:
         BotCommand("restore", "Разблокировать"),
         BotCommand("delete",  "Удалить запись"),
         BotCommand("export",  "Скачать CSV"),
-        BotCommand("stats",   "Статистика"),
-        BotCommand("reload",  "Перезагрузить из Gist"),
-        BotCommand("start",   "Помощь"),
+        BotCommand("stats",    "Статистика"),
+        BotCommand("reload",   "Перезагрузить из Gist"),
+        BotCommand("checkkey", "Отладка генерации ключа"),
+        BotCommand("start",    "Помощь"),
     ])
     log.info("Начальная загрузка данных…")
     ok, host = store.load()
@@ -684,6 +733,8 @@ def main() -> None:
             ISSUE_CONFIRM: [CallbackQueryHandler(issue_confirm_cb, pattern="^issue_(confirm|cancel)$")],
         },
         fallbacks=[CommandHandler("cancel", issue_cancel_cmd)],
+        per_chat=True,
+        per_user=True,
         per_message=False,
     )
 
@@ -695,6 +746,8 @@ def main() -> None:
             EDIT_VALUE: [MessageHandler(filters.TEXT & ~filters.COMMAND, edit_set_value)],
         },
         fallbacks=[CommandHandler("cancel", edit_cancel_cmd)],
+        per_chat=True,
+        per_user=True,
         per_message=False,
     )
 
@@ -710,6 +763,7 @@ def main() -> None:
         ("restore", cmd_restore),
         ("delete",  cmd_delete),
         ("export",  cmd_export),
+        ("checkkey", cmd_checkkey),
     ]:
         app.add_handler(CommandHandler(cmd, handler))
 
