@@ -4,9 +4,21 @@ VScan Bot — конфигурация.
 """
 
 import os
+import logging
+
+log = logging.getLogger(__name__)
 
 # ── Лицензирование ────────────────────────────────────────────
-SECRET_KEY      = os.environ.get("VSCAN_SECRET_KEY", "").encode()
+# SECRET_KEY должен совпадать с ключом в клиентском приложении VScan.
+# Берётся из GitHub Secret VSCAN_SECRET_KEY.
+# Если не задан — используется значение из оригинального config.py.
+_secret_env = os.environ.get("VSCAN_SECRET_KEY", "")
+SECRET_KEY = (
+    _secret_env.encode()
+    if _secret_env
+    else b"8e4d38088f5863581679a21bc7777881ec4eff0f842e0ed93ee2ce3d55764263"
+)
+
 KEY_TOTAL_CHARS = 20
 KEY_SEGMENT_LEN = 5
 
