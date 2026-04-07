@@ -93,10 +93,15 @@ MAIN_KEYBOARD = ReplyKeyboardMarkup(
 def admin_only(func):
     @wraps(func)
     async def wrapper(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+        if not update.effective_user:
+            return
+            
         uid = update.effective_user.id
-        if ADMIN_IDS and uid not in ADMIN_IDS:
-            await update.effective_message.reply_text("⛔ Нет доступа.")
-            return ConversationHandler.END
+        
+        # Если списка нет или пользователя нет в списке — бот просто молчит
+        if not ADMIN_IDS or uid not in ADMIN_IDS:
+            return 
+            
         return await func(update, ctx)
     return wrapper
 
@@ -388,7 +393,7 @@ async def issue_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     )
     return ISSUE_ID
 
-
+@admin_only
 async def issue_get_id(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     dev_id = update.message.text.strip()
     if not dev_id:
@@ -520,10 +525,10 @@ async def _build_preview(reply_fn, ctx, days: int):
 
 # ── Callback-хаб ─────────────────────────────────────────────
 
+@admin_only  # <-- ОБЯЗАТЕЛЬНО ДОБАВЬ ЭТУ СТРОКУ ТУТ
 async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    data  = query.data
 
     # ── Навигация ──────────────────────────────────────────────
     if data == "noop":
