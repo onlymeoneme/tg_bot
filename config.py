@@ -12,17 +12,22 @@ log = logging.getLogger(__name__)
 # SECRET_KEY должен совпадать с ключом в клиентском приложении VScan.
 # Берётся из GitHub Secret VSCAN_SECRET_KEY.
 # Если не задан — используется значение из оригинального config.py.
-_secret_env = os.environ.get("VSCAN_SECRET_KEY", "")
-SECRET_KEY = (
-    _secret_env.encode()
-    if _secret_env
-    else b"8e4d38088f5863581679a21bc7777881ec4eff0f842e0ed93ee2ce3d55764263"
-)
+_secret_env = os.environ.get("VSCAN_SECRET_KEY")
+
+if _secret_env:
+    # Если секрет найден, превращаем его в байты
+    SECRET_KEY = _secret_env.encode()
+else:
+    # Если секрета нет (забыли добавить в GitHub), бот выдаст ошибку
+    # Это лучше, чем работать на небезопасном дефолтном ключе
+    print("ОШИБКА: Секрет VSCAN_SECRET_KEY не найден в настройках репозитория!")
+    sys.exit(1)
 
 KEY_TOTAL_CHARS = 20
 KEY_SEGMENT_LEN = 5
 
 # ── GitHub Gist ───────────────────────────────────────────────
+VSCAN_SECRET_KEY = os.environ.get("VSCAN_SECRET_KEY", "")
 GITHUB_TOKEN  = os.environ.get("GIST_TOKEN", "")
 GIST_ID       = os.environ.get("GIST_ID", "")
 GIST_FILENAME = "vscan_licenses.json"
