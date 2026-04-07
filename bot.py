@@ -530,6 +530,8 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
+    data = query.data
+    
     # ── Навигация ──────────────────────────────────────────────
     if data == "noop":
         return
