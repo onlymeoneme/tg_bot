@@ -31,9 +31,9 @@ from telegram.ext import (
     filters,
 )
 
-from config import BOT_TOKEN, ADMIN_IDS, SECRET_KEY
-from core.datastore import DataStore
+from config import BOT_TOKEN, ADMIN_IDS, SECRET_KEY, MINI_APP_URL
 from core.license import create_key
+from shared_store import store
 
 # ── Логирование ───────────────────────────────────────────────
 
@@ -43,10 +43,6 @@ logging.basicConfig(
     datefmt="%H:%M:%S",
 )
 log = logging.getLogger(__name__)
-
-# ── Глобальное хранилище ──────────────────────────────────────
-
-store = DataStore()
 
 # ── Состояния ConversationHandler ────────────────────────────
 
@@ -95,13 +91,13 @@ def admin_only(func):
     async def wrapper(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         if not update.effective_user:
             return
-            
+
         uid = update.effective_user.id
-        
+
         # Если списка нет или пользователя нет в списке — бот просто молчит
         if not ADMIN_IDS or uid not in ADMIN_IDS:
-            return 
-            
+            return
+
         return await func(update, ctx)
     return wrapper
 
@@ -170,6 +166,7 @@ async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     users  = store.users()
     total  = len(users)
     active = sum(1 for u in users if u.get("status") == "ACTIVE")
+
     await update.message.reply_text(
         f"🔐 <b>VScan Admin</b>\n\n"
         f"📦 Лицензий в базе: <b>{total}</b>  |  🟢 Активных: <b>{active}</b>\n\n"
@@ -177,6 +174,20 @@ async def cmd_start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         parse_mode="HTML",
         reply_markup=MAIN_KEYBOARD,
     )
+
+    # Кнопка Mini App (если URL установлен через run.py)
+    mini_app_url = MINI_APP_URL or ctx.bot_data.get("mini_app_url", "")
+    if mini_app_url:
+        from telegram import WebAppInfo
+        await update.message.reply_text(
+            "Или откройте полнофункциональную панель:",
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton(
+                    "🌐 Открыть Admin Panel",
+                    web_app=WebAppInfo(url=mini_app_url),
+                )
+            ]]),
+        )
 
 
 # ── Список лицензий ──────────────────────────────────────────
@@ -531,7 +542,7 @@ async def on_callback(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await query.answer()
 
     data = query.data
-    
+
     # ── Навигация ──────────────────────────────────────────────
     if data == "noop":
         return
