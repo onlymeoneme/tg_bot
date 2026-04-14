@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>VScan Admin</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  :root {
+    --bg:       var(--tg-theme-bg-color, #1c1c1e);
+    --bg2:      var(--tg-theme-secondary-bg-color, #2c2c2e);
+    --text:     var(--tg-theme-text-color, #ffffff);
+    --hint:     var(--tg-theme-hint-color, #8e8e93);
+    --btn:      var(--tg-theme-button-color, #2481cc);
+    --btn-txt:  var(--tg-theme-button-text-color, #ffffff);
+    --link:     var(--tg-theme-link-color, #2481cc);
+    --green:    #34c759;
+    --red:      #ff3b30;
+    --orange:   #ff9f0a;
+    --radius:   12px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  body { background: var(--bg); color: var(--text); font-family: -apple-system, sans-serif; font-size: 15px; min-height: 100vh; }
+
+  /* Layout */
+  #app { display: flex; flex-direction: column; min-height: 100vh; }
+  .header { padding: 16px 16px 8px; display: flex; align-items: center; justify-content: space-between; }
+  .header h1 { font-size: 20px; font-weight: 700; }
+  .header-sub { font-size: 13px; color: var(--hint); }
+  .content { flex: 1; padding: 0 12px 80px; overflow-y: auto; }
+
+  /* Bottom nav */
+  .bottom-nav { position: fixed; bottom: 0; left: 0; right: 0; background: var(--bg2); display: flex; border-top: 1px solid rgba(255,255,255,.08); padding-bottom: env(safe-area-inset-bottom); z-index: 100; }
+  .nav-btn { flex: 1; padding: 10px 4px; background: none; border: none; color: var(--hint); font-size: 11px; display: flex; flex-direction: column; align-items: center; gap: 3px; cursor: pointer; transition: color .15s; }
+  .nav-btn .icon { font-size: 22px; }
+  .nav-btn.active { color: var(--btn); }
+
+  /* Tabs */
+  .tab { display: none; }
+  .tab.active { display: block; }
+
+  /* Stats grid */
+  .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 8px 0 16px; }
+  .stat-card { background: var(--bg2); border-radius: var(--radius); padding: 14px; }
+  .stat-card .val { font-size: 28px; font-weight: 700; line-height: 1; }
+  .stat-card .lbl { font-size: 12px; color: var(--hint); margin-top: 4px; }
+  .stat-card.green .val { color: var(--green); }
+  .stat-card.red   .val { color: var(--red); }
+  .stat-card.orange .val { color: var(--orange); }
+
+  /* Search bar */
+  .search-row { display: flex; gap: 8px; margin-bottom: 12px; }
+  .search-input { flex: 1; background: var(--bg2); border: none; border-radius: var(--radius); padding: 10px 14px; color: var(--text); font-size: 15px; outline: none; }
+  .search-input::placeholder { color: var(--hint); }
+  .fab { background: var(--btn); color: var(--btn-txt); border: none; border-radius: var(--radius); padding: 10px 16px; font-size: 22px; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+
+  /* License cards */
+  .license-card { background: var(--bg2); border-radius: var(--radius); padding: 14px; margin-bottom: 8px; cursor: pointer; transition: opacity .15s; }
+  .license-card:active { opacity: .7; }
+  .card-top { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+  .status-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+  .status-dot.active  { background: var(--green); }
+  .status-dot.revoked { background: var(--red); }
+  .card-name { font-weight: 600; flex: 1; }
+  .card-id   { font-size: 11px; color: var(--hint); font-family: monospace; }
+  .card-meta { font-size: 12px; color: var(--hint); display: flex; gap: 12px; flex-wrap: wrap; }
+  .expire-soon { color: var(--orange); }
+  .expire-over { color: var(--red); }
+
+  /* Empty state */
+  .empty { text-align: center; padding: 48px 16px; color: var(--hint); }
+  .empty .icon { font-size: 48px; margin-bottom: 12px; }
+
+  /* Bottom sheet */
+  .sheet-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 200; opacity: 0; transition: opacity .2s; pointer-events: none; }
+  .sheet-overlay.visible { opacity: 1; pointer-events: all; }
+  .bottom-sheet { position: fixed; bottom: 0; left: 0; right: 0; background: var(--bg2); border-radius: 16px 16px 0 0; z-index: 201; padding: 0 0 env(safe-area-inset-bottom); transform: translateY(100%); transition: transform .25s cubic-bezier(.4,0,.2,1); }
+  .bottom-sheet.visible { transform: translateY(0); }
+  .sheet-handle { width: 36px; height: 4px; background: rgba(255,255,255,.2); border-radius: 2px; margin: 12px auto 16px; }
+  .sheet-title { font-size: 13px; font-weight: 600; color: var(--hint); text-transform: uppercase; letter-spacing: .5px; padding: 0 16px 8px; }
+  .sheet-user { padding: 0 16px 12px; }
+  .sheet-user .name { font-size: 17px; font-weight: 600; }
+  .sheet-user .meta { font-size: 13px; color: var(--hint); margin-top: 2px; }
+  .sheet-user .key  { font-size: 11px; font-family: monospace; color: var(--hint); margin-top: 4px; word-break: break-all; }
+  .sheet-actions { padding: 0 12px 12px; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .action-btn { background: var(--bg); border: none; border-radius: 10px; padding: 12px; color: var(--text); font-size: 14px; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 4px; transition: opacity .15s; }
+  .action-btn:active { opacity: .7; }
+  .action-btn .icon { font-size: 20px; }
+  .action-btn.danger { color: var(--red); }
+  .extend-row { padding: 0 12px 16px; display: flex; flex-wrap: wrap; gap: 6px; }
+  .extend-btn { background: var(--bg); border: none; border-radius: 8px; padding: 8px 12px; color: var(--btn); font-size: 13px; cursor: pointer; }
+  .extend-section { display: none; }
+  .extend-section.visible { display: block; }
+  .back-btn { background: none; border: none; color: var(--btn); font-size: 14px; padding: 0 16px 8px; cursor: pointer; }
+
+  /* New license modal */
+  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.6); z-index: 300; display: flex; align-items: flex-end; opacity: 0; transition: opacity .2s; pointer-events: none; }
+  .modal-overlay.visible { opacity: 1; pointer-events: all; }
+  .modal { background: var(--bg2); border-radius: 16px 16px 0 0; width: 100%; padding: 0 16px env(safe-area-inset-bottom); transform: translateY(100%); transition: transform .25s cubic-bezier(.4,0,.2,1); }
+  .modal.visible { transform: translateY(0); }
+  .modal-header { display: flex; align-items: center; justify-content: space-between; padding: 16px 0 12px; }
+  .modal-header h2 { font-size: 18px; font-weight: 700; }
+  .close-btn { background: none; border: none; color: var(--hint); font-size: 22px; cursor: pointer; }
+  .form-label { font-size: 13px; color: var(--hint); margin-bottom: 6px; display: block; }
+  .form-field { margin-bottom: 14px; }
+  .form-input { width: 100%; background: var(--bg); border: none; border-radius: 10px; padding: 11px 14px; color: var(--text); font-size: 15px; outline: none; }
+  .form-input::placeholder { color: var(--hint); }
+  .days-picker { display: flex; flex-wrap: wrap; gap: 6px; }
+  .day-btn { background: var(--bg); border: 2px solid transparent; border-radius: 8px; padding: 7px 12px; color: var(--text); font-size: 13px; cursor: pointer; }
+  .day-btn.selected { border-color: var(--btn); color: var(--btn); }
+  .submit-btn { width: 100%; background: var(--btn); color: var(--btn-txt); border: none; border-radius: var(--radius); padding: 14px; font-size: 16px; font-weight: 600; cursor: pointer; margin: 8px 0 16px; }
+  .submit-btn:disabled { opacity: .5; }
+
+  /* Toast */
+  .toast { position: fixed; bottom: 90px; left: 50%; transform: translateX(-50%) translateY(20px); background: rgba(0,0,0,.85); color: #fff; padding: 10px 20px; border-radius: 20px; font-size: 14px; opacity: 0; transition: opacity .2s, transform .2s; pointer-events: none; white-space: nowrap; z-index: 400; }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  /* Loading skeleton */
+  .skeleton { background: linear-gradient(90deg, var(--bg2) 25%, rgba(255,255,255,.05) 50%, var(--bg2) 75%); background-size: 200% 100%; animation: shimmer 1.2s infinite; border-radius: var(--radius); }
+  @keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+  .skel-card { height: 80px; margin-bottom: 8px; }
+  .skel-stat { height: 80px; }
+
+  /* Reload button */
+  .reload-btn { background: none; border: 1px solid rgba(255,255,255,.15); border-radius: 20px; padding: 6px 14px; color: var(--hint); font-size: 13px; cursor: pointer; }
+</style>
+</head>
+<body>
+<div id="app">
+  <!-- Header -->
+  <div class="header">
+    <div>
+      <h1>🔐 VScan Admin</h1>
+      <div class="header-sub" id="header-sub">Загрузка…</div>
+    </div>
+    <button class="reload-btn" onclick="reloadData()">↻ Обновить</button>
+  </div>
+
+  <div class="content">
+    <!-- TAB: Dashboard -->
+    <div id="tab-dashboard" class="tab active">
+      <div class="stats-grid" id="stats-grid">
+        <div class="stat-card skeleton skel-stat"></div>
+        <div class="stat-card skeleton skel-stat"></div>
+        <div class="stat-card skeleton skel-stat"></div>
+        <div class="stat-card skeleton skel-stat"></div>
+      </div>
+    </div>
+
+    <!-- TAB: Licenses -->
+    <div id="tab-licenses" class="tab">
+      <div class="search-row">
+        <input class="search-input" id="search-input" placeholder="🔍 Имя, Device ID, модель…" oninput="onSearch(this.value)">
+        <button class="fab" onclick="openNewModal()">＋</button>
+      </div>
+      <div id="license-list">
+        <div class="skeleton skel-card"></div>
+        <div class="skeleton skel-card"></div>
+        <div class="skeleton skel-card"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bottom Nav -->
+  <nav class="bottom-nav">
+    <button class="nav-btn active" id="nav-dashboard" onclick="switchTab('dashboard')">
+      <span class="icon">📊</span> Статистика
+    </button>
+    <button class="nav-btn" id="nav-licenses" onclick="switchTab('licenses')">
+      <span class="icon">📋</span> Лицензии
+    </button>
+  </nav>
+</div>
+
+<!-- Bottom Sheet (user actions) -->
+<div class="sheet-overlay" id="sheet-overlay" onclick="closeSheet()"></div>
+<div class="bottom-sheet" id="bottom-sheet">
+  <div class="sheet-handle"></div>
+  <div class="sheet-title">Действия с лицензией</div>
+  <div class="sheet-user" id="sheet-user"></div>
+
+  <!-- Main actions -->
+  <div class="sheet-actions" id="sheet-main-actions"></div>
+
+  <!-- Extend sub-section -->
+  <div class="extend-section" id="extend-section">
+    <button class="back-btn" onclick="showMainActions()">← Назад</button>
+    <div class="sheet-title">Продлить лицензию</div>
+    <div class="extend-row" id="extend-row"></div>
+  </div>
+</div>
+
+<!-- New License Modal -->
+<div class="modal-overlay" id="modal-overlay" onclick="closeNewModal(event)">
+  <div class="modal" id="new-modal">
+    <div class="modal-header">
+      <h2>➕ Новая лицензия</h2>
+      <button class="close-btn" onclick="closeNewModal()">✕</button>
+    </div>
+    <div class="form-field">
+      <label class="form-label">Device ID *</label>
+      <input class="form-input" id="f-device-id" placeholder="abc123def456">
+    </div>
+    <div class="form-field">
+      <label class="form-label">Имя пользователя *</label>
+      <input class="form-input" id="f-name" placeholder="Иван Иванов">
+    </div>
+    <div class="form-field">
+      <label class="form-label">Модель устройства</label>
+      <input class="form-input" id="f-model" placeholder="Samsung Galaxy S21">
+    </div>
+    <div class="form-field">
+      <label class="form-label">Версия Android</label>
+      <input class="form-input" id="f-os" placeholder="13">
+    </div>
+    <div class="form-field">
+      <label class="form-label">Срок действия</label>
+      <div class="days-picker" id="days-picker"></div>
+    </div>
+    <button class="submit-btn" id="submit-btn" onclick="submitNewLicense()">Создать лицензию</button>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+const tg = window.Telegram.WebApp;
+tg.ready();
+tg.expand();
+
+const API = '';
+let allUsers = [];
+let selectedUser = null;
+let selectedDays = 30;
+let searchQuery = '';
+
+const headers = () => ({
+  'Content-Type': 'application/json',
+  'x-init-data': tg.initData || '',
+});
+
+// ── Data loading ──────────────────────────────────────────────
+
+async function loadStats() {
+  try {
+    const r = await fetch(`${API}/api/stats`, { headers: headers() });
+    if (!r.ok) throw new Error(r.status);
+    const s = await r.json();
+    renderStats(s);
+    document.getElementById('header-sub').textContent =
+      `${s.total} лицензий · ${s.active} активных`;
+  } catch (e) {
+    document.getElementById('header-sub').textContent = 'Ошибка загрузки';
+  }
+}
+
+async function loadUsers() {
+  try {
+    const r = await fetch(`${API}/api/users`, { headers: headers() });
+    if (!r.ok) throw new Error(r.status);
+    allUsers = await r.json();
+    renderList(allUsers);
+  } catch (e) {
+    document.getElementById('license-list').innerHTML =
+      '<div class="empty"><div class="icon">❌</div><div>Ошибка загрузки</div></div>';
+  }
+}
+
+async function reloadData() {
+  tg.HapticFeedback?.impactOccurred('light');
+  await Promise.all([loadStats(), loadUsers()]);
+  showToast('✅ Обновлено');
+}
+
+// ── Render ────────────────────────────────────────────────────
+
+function renderStats(s) {
+  const grid = document.getElementById('stats-grid');
+  const cards = [
+    { val: s.total,         lbl: '📦 Всего',             cls: '' },
+    { val: s.active,        lbl: '🟢 Активных',          cls: 'green' },
+    { val: s.revoked,       lbl: '🔴 Заблокировано',     cls: 'red' },
+    { val: s.expiring_soon, lbl: '⚠️ Истекают ≤7 дней', cls: 'orange' },
+  ];
+  grid.innerHTML = cards.map(c => `
+    <div class="stat-card ${c.cls}">
+      <div class="val">${c.val}</div>
+      <div class="lbl">${c.lbl}</div>
+    </div>
+  `).join('');
+}
+
+function daysLeft(expiresAt) {
+  if (!expiresAt) return null;
+  const delta = Math.floor((new Date(expiresAt) - new Date()) / 86400000);
+  if (delta < 0)   return { text: `Просрочено ${Math.abs(delta)} дн.`, cls: 'expire-over' };
+  if (delta === 0) return { text: 'Истекает сегодня', cls: 'expire-soon' };
+  if (delta <= 7)  return { text: `Осталось ${delta} дн.`, cls: 'expire-soon' };
+  return { text: `${delta} дн.`, cls: '' };
+}
+
+function renderList(users) {
+  const list = document.getElementById('license-list');
+  const q = searchQuery.toLowerCase();
+  const filtered = q
+    ? users.filter(u =>
+        (u.device_id + u.name + (u.model||'')).toLowerCase().includes(q))
+    : users;
+
+  if (!filtered.length) {
+    list.innerHTML = `<div class="empty">
+      <div class="icon">${q ? '🔍' : '📭'}</div>
+      <div>${q ? `Ничего не найдено по «${q}»` : 'Нет лицензий'}</div>
+    </div>`;
+    return;
+  }
+
+  list.innerHTML = filtered.map(u => {
+    const dl = daysLeft(u.expires_at);
+    const isActive = u.status === 'ACTIVE';
+    return `<div class="license-card" onclick="openSheet('${u.device_id}')">
+      <div class="card-top">
+        <div class="status-dot ${isActive ? 'active' : 'revoked'}"></div>
+        <div class="card-name">${esc(u.name)}</div>
+      </div>
+      <div class="card-id">${esc(u.device_id)}</div>
+      <div class="card-meta">
+        <span>${esc(u.model || '—')}</span>
+        <span>Android ${esc(u.os || '—')}</span>
+        ${dl ? `<span class="${dl.cls}">${dl.text}</span>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ── Tabs ──────────────────────────────────────────────────────
+
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById(`tab-${name}`).classList.add('active');
+  document.getElementById(`nav-${name}`).classList.add('active');
+  tg.HapticFeedback?.selectionChanged();
+}
+
+// ── Search ────────────────────────────────────────────────────
+
+function onSearch(val) {
+  searchQuery = val;
+  renderList(allUsers);
+}
+
+// ── Bottom Sheet ──────────────────────────────────────────────
+
+function openSheet(deviceId) {
+  selectedUser = allUsers.find(u => u.device_id === deviceId);
+  if (!selectedUser) return;
+  tg.HapticFeedback?.impactOccurred('light');
+
+  const u = selectedUser;
+  const dl = daysLeft(u.expires_at);
+  document.getElementById('sheet-user').innerHTML = `
+    <div class="name">${esc(u.name)}</div>
+    <div class="meta">${esc(u.device_id)} · ${esc(u.model||'—')} · Android ${esc(u.os||'—')}</div>
+    <div class="meta">${u.status === 'ACTIVE' ? '🟢 ACTIVE' : '🔴 REVOKED'}
+      ${dl ? ` · <span class="${dl.cls}">${dl.text}</span>` : ''}</div>
+    <div class="key">${esc(u.license_key||'—')}</div>`;
+
+  showMainActions();
+  document.getElementById('sheet-overlay').classList.add('visible');
+  document.getElementById('bottom-sheet').classList.add('visible');
+}
+
+function showMainActions() {
+  document.getElementById('extend-section').classList.remove('visible');
+  const u = selectedUser;
+  const isActive = u.status === 'ACTIVE';
+  document.getElementById('sheet-main-actions').innerHTML = `
+    <button class="action-btn" onclick="startExtend()">
+      <span class="icon">⏳</span> Продлить
+    </button>
+    <button class="action-btn ${isActive ? 'danger' : ''}" onclick="toggleStatus()">
+      <span class="icon">${isActive ? '🔴' : '🟢'}</span>
+      ${isActive ? 'Заблокировать' : 'Разблокировать'}
+    </button>
+    <button class="action-btn" onclick="copyKey()">
+      <span class="icon">📋</span> Копировать ключ
+    </button>
+    <button class="action-btn danger" onclick="confirmDelete()">
+      <span class="icon">🗑</span> Удалить
+    </button>`;
+  document.getElementById('sheet-main-actions').style.display = 'grid';
+}
+
+function startExtend() {
+  document.getElementById('sheet-main-actions').style.display = 'none';
+  const section = document.getElementById('extend-section');
+  section.classList.add('visible');
+  const days = [7, 14, 30, 60, 90, 180, 365];
+  document.getElementById('extend-row').innerHTML = days.map(d =>
+    `<button class="extend-btn" onclick="doExtend(${d})">+${d} дн.</button>`
+  ).join('');
+}
+
+function closeSheet() {
+  document.getElementById('sheet-overlay').classList.remove('visible');
+  document.getElementById('bottom-sheet').classList.remove('visible');
+}
+
+// ── Actions ───────────────────────────────────────────────────
+
+async function toggleStatus() {
+  const u = selectedUser;
+  const action = u.status === 'ACTIVE' ? 'revoke' : 'restore';
+  closeSheet();
+  try {
+    const r = await fetch(`${API}/api/users/${u.device_id}/${action}`, {
+      method: 'POST', headers: headers()
+    });
+    if (!r.ok) throw new Error();
+    const updated = await r.json();
+    Object.assign(u, updated);
+    showToast(action === 'revoke' ? '🔴 Заблокирован' : '🟢 Разблокирован');
+    tg.HapticFeedback?.notificationOccurred('success');
+    renderList(allUsers);
+    loadStats();
+  } catch {
+    showToast('❌ Ошибка');
+    tg.HapticFeedback?.notificationOccurred('error');
+  }
+}
+
+async function doExtend(days) {
+  const u = selectedUser;
+  closeSheet();
+  try {
+    const r = await fetch(`${API}/api/users/${u.device_id}/extend`, {
+      method: 'POST', headers: headers(),
+      body: JSON.stringify({ days })
+    });
+    if (!r.ok) throw new Error();
+    const updated = await r.json();
+    Object.assign(u, updated);
+    showToast(`✅ Продлено на ${days} дней`);
+    tg.HapticFeedback?.notificationOccurred('success');
+    renderList(allUsers);
+  } catch {
+    showToast('❌ Ошибка продления');
+  }
+}
+
+function copyKey() {
+  const key = selectedUser?.license_key || '';
+  if (navigator.clipboard) {
+    navigator.clipboard.writeText(key).then(() => showToast('📋 Ключ скопирован'));
+  }
+  closeSheet();
+}
+
+function confirmDelete() {
+  const u = selectedUser;
+  tg.showConfirm(`Удалить лицензию ${u.name}?\nЭто действие необратимо.`, async (ok) => {
+    if (!ok) return;
+    closeSheet();
+    try {
+      const r = await fetch(`${API}/api/users/${u.device_id}`, {
+        method: 'DELETE', headers: headers()
+      });
+      if (!r.ok) throw new Error();
+      allUsers = allUsers.filter(x => x.device_id !== u.device_id);
+      showToast('🗑 Удалено');
+      tg.HapticFeedback?.notificationOccurred('success');
+      renderList(allUsers);
+      loadStats();
+    } catch {
+      showToast('❌ Ошибка удаления');
+    }
+  });
+}
+
+// ── New License ───────────────────────────────────────────────
+
+const DAY_OPTIONS = [7, 14, 30, 60, 90, 180, 365];
+
+function openNewModal() {
+  selectedDays = 30;
+  ['f-device-id','f-name','f-model','f-os'].forEach(id => {
+    document.getElementById(id).value = '';
+  });
+  document.getElementById('days-picker').innerHTML = DAY_OPTIONS.map(d =>
+    `<button class="day-btn ${d === 30 ? 'selected' : ''}" onclick="selectDays(${d}, this)">${d} дн.</button>`
+  ).join('');
+  document.getElementById('modal-overlay').classList.add('visible');
+  document.getElementById('new-modal').classList.add('visible');
+  setTimeout(() => document.getElementById('f-device-id').focus(), 300);
+}
+
+function closeNewModal(e) {
+  if (e && e.target !== document.getElementById('modal-overlay')) return;
+  document.getElementById('modal-overlay').classList.remove('visible');
+  document.getElementById('new-modal').classList.remove('visible');
+}
+
+function selectDays(days, btn) {
+  selectedDays = days;
+  document.querySelectorAll('.day-btn').forEach(b => b.classList.remove('selected'));
+  btn.classList.add('selected');
+}
+
+async function submitNewLicense() {
+  const deviceId = document.getElementById('f-device-id').value.trim();
+  const name     = document.getElementById('f-name').value.trim();
+  if (!deviceId || !name) {
+    showToast('⚠️ Заполните обязательные поля');
+    return;
+  }
+  const btn = document.getElementById('submit-btn');
+  btn.disabled = true;
+  btn.textContent = 'Создание…';
+  try {
+    const r = await fetch(`${API}/api/users`, {
+      method: 'POST', headers: headers(),
+      body: JSON.stringify({
+        device_id: deviceId,
+        name,
+        model: document.getElementById('f-model').value.trim() || 'Unknown',
+        os:    document.getElementById('f-os').value.trim() || '—',
+        days:  selectedDays,
+      })
+    });
+    if (!r.ok) throw new Error();
+    const newUser = await r.json();
+    allUsers.unshift(newUser);
+    closeNewModal();
+    renderList(allUsers);
+    loadStats();
+    showToast('✅ Лицензия создана');
+    tg.HapticFeedback?.notificationOccurred('success');
+    switchTab('licenses');
+  } catch {
+    showToast('❌ Ошибка создания');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Создать лицензию';
+  }
+}
+
+// ── Toast ─────────────────────────────────────────────────────
+
+let toastTimer;
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 2200);
+}
+
+// ── Init ──────────────────────────────────────────────────────
+
+(async () => {
+  await Promise.all([loadStats(), loadUsers()]);
+})();
+</script>
+</body>
+</html>
