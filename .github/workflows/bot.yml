@@ -1,38 +1,48 @@
-name: VScan Admin Bot
+name: 🤖 VScan Bot
 
 on:
-  # Запускать вручную из вкладки Actions
+  # Ручной запуск
   workflow_dispatch:
-
-  # Автоперезапуск каждые 5 часов 50 минут
-  # (GitHub Actions завершает job через 6 часов)
+  # Автоматический перезапуск каждые 5 часов (лимит Actions — 6ч)
   schedule:
-    - cron: "0 */6 * * *"
+    - cron: '0 */5 * * *'
 
 jobs:
   run-bot:
+    name: Run Bot + Mini App
     runs-on: ubuntu-latest
-    timeout-minutes: 350   # ~5 ч 50 мин — чуть меньше лимита GitHub
+    timeout-minutes: 350   # ~5ч 50мин
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Python
+      - name: Python 3.12
         uses: actions/setup-python@v5
         with:
-          python-version: "3.12"
+          python-version: '3.12'
           cache: pip
 
-      - name: Install dependencies
+      - name: Install Python deps
         run: pip install -r requirements.txt
 
-      - name: Run bot
-        run: python bot.py
+      - name: Install cloudflared
+        run: |
+          LATEST=$(curl -sI https://github.com/cloudflare/cloudflared/releases/latest \
+            | grep -i location | awk '{print $2}' | tr -d '\r' | xargs basename)
+          curl -fsSL "https://github.com/cloudflare/cloudflared/releases/download/${LATEST}/cloudflared-linux-amd64.deb" \
+            -o cloudflared.deb
+          sudo dpkg -i cloudflared.deb
+          cloudflared --version
+
+      - name: Start Bot
         env:
-          BOT_TOKEN:        ${{ secrets.BOT_TOKEN }}
-          GIST_TOKEN:       ${{ secrets.GIST_TOKEN }}
-          GIST_ID:          ${{ secrets.GIST_ID }}
+          BOT_TOKEN:       ${{ secrets.BOT_TOKEN }}
+          ADMIN_IDS:       ${{ secrets.ADMIN_IDS }}
           VSCAN_SECRET_KEY: ${{ secrets.VSCAN_SECRET_KEY }}
-          ADMIN_IDS:        ${{ secrets.ADMIN_IDS }}
-          # Опционально: USE_FAKE_SNI=true  FAKE_SNI=google.com
+          GIST_TOKEN:      ${{ secrets.GIST_TOKEN }}
+          GIST_ID:         ${{ secrets.GIST_ID }}
+          # Опционально
+          USE_FAKE_SNI:    ${{ secrets.USE_FAKE_SNI }}
+          FAKE_SNI:        ${{ secrets.FAKE_SNI }}
+        run: python run.py
